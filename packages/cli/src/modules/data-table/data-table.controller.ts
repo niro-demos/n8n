@@ -108,7 +108,7 @@ export class DataTableController {
 	) {
 		this.checkInstanceWriteAccess();
 		try {
-			return await this.dataTableService.createDataTable(req.params.projectId, dto);
+			return await this.dataTableService.createDataTable(req.params.projectId, dto, req.user.id);
 		} catch (e: unknown) {
 			if (!(e instanceof Error)) {
 				throw e;
@@ -119,6 +119,8 @@ export class DataTableController {
 				throw new ConflictError(e.message);
 			} else if (e instanceof DataTableValidationError) {
 				throw new BadRequestError(e.message);
+			} else if (e instanceof ResponseError) {
+				throw e;
 			} else if (e instanceof FileUploadError) {
 				throw new BadRequestError(e.message);
 			} else {
@@ -391,12 +393,15 @@ export class DataTableController {
 				dataTableId,
 				req.params.projectId,
 				dto.fileId,
+				req.user.id,
 			);
 		} catch (e: unknown) {
 			if (e instanceof DataTableNotFoundError) {
 				throw new NotFoundError(e.message);
 			} else if (e instanceof DataTableValidationError) {
 				throw new BadRequestError(e.message);
+			} else if (e instanceof ResponseError) {
+				throw e;
 			} else if (e instanceof FileUploadError) {
 				throw new BadRequestError(e.message);
 			} else if (e instanceof Error) {

@@ -12,6 +12,9 @@ vi.mock('../data-table-size-validator.service', () => ({
 vi.mock('../data-table.repository', () => ({
 	DataTableRepository: class {},
 }));
+vi.mock('../data-table-upload.service', () => ({
+	DataTableUploadService: class {},
+}));
 vi.mock('fs/promises', () => ({
 	mkdir: vi.fn().mockResolvedValue(undefined),
 	readdir: vi.fn().mockResolvedValue([]),
@@ -36,6 +39,7 @@ vi.mock('multer', () => {
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 
 import type { DataTableSizeValidator } from '../data-table-size-validator.service';
+import type { DataTableUploadService } from '../data-table-upload.service';
 import type { DataTableRepository } from '../data-table.repository';
 import { MulterUploadMiddleware } from '../multer-upload-middleware';
 import type { AuthenticatedRequestWithFile } from '../types';
@@ -60,15 +64,17 @@ const buildMiddleware = (opts: { uploadMaxFileSize?: number } = {}) => {
 
 	const sizeValidator = mock<DataTableSizeValidator>();
 	const dataTableRepository = mock<DataTableRepository>();
+	const uploadService = mock<DataTableUploadService>();
 	const logger = mock<Logger>();
 
 	const middleware = new MulterUploadMiddleware(
 		globalConfig,
 		sizeValidator,
 		dataTableRepository,
+		uploadService,
 		logger,
 	);
-	return { middleware, sizeValidator, dataTableRepository, logger };
+	return { middleware, sizeValidator, dataTableRepository, uploadService, logger };
 };
 
 const stubUploadDir = (files: Array<{ name: string; size: number }>) => {
@@ -94,7 +100,7 @@ const runHandler = async (
 	reqInit: Partial<AuthenticatedRequestWithFile> = {},
 ): Promise<AuthenticatedRequestWithFile> => {
 	const handler = middleware.single('file');
-	const req = reqInit as AuthenticatedRequestWithFile & Request;
+	const req = { user: { id: 'user-1' }, ...reqInit } as AuthenticatedRequestWithFile & Request;
 	const res = {} as Response;
 	await new Promise<void>((resolve) => {
 		void handler(req, res, () => resolve());

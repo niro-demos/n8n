@@ -4,6 +4,8 @@ import { Service } from '@n8n/di';
 import { promises as fs } from 'fs';
 import { InstanceSettings } from 'n8n-core';
 
+import { DataTableUploadService } from './data-table-upload.service';
+
 @Service()
 export class DataTableFileCleanupService {
 	private readonly uploadDir: string;
@@ -13,6 +15,7 @@ export class DataTableFileCleanupService {
 	constructor(
 		private readonly globalConfig: GlobalConfig,
 		private readonly instanceSettings: InstanceSettings,
+		private readonly uploadService: DataTableUploadService,
 	) {
 		this.uploadDir = this.globalConfig.dataTable.uploadDir;
 	}
@@ -89,5 +92,6 @@ export class DataTableFileCleanupService {
 				throw error;
 			}
 		}
+		await this.uploadService.deleteMetadata(fileId);
 	}
 }

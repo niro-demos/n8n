@@ -486,6 +486,42 @@ describe('GET /projects/:projectId/data-tables/:dataTableId/download-csv', () =>
 		expect(lines[1].split(',').length).toBe(2); // Only firstName and age
 	});
 
+	test('should neutralize spreadsheet formula prefixes when downloading CSV', async () => {
+		const project = await createTeamProject('test project', owner);
+		const dataTable = await createDataTable(project, {
+			name: 'Formula Prefixes',
+			columns: [
+				{ name: 'name', type: 'string' },
+				{ name: 'score', type: 'number' },
+			],
+		});
+
+		const columns = await dataTableColumnRepository.getColumns(dataTable.id);
+		await dataTableRowsRepository.insertRows(
+			dataTable.id,
+			[
+				{ name: 'plain-control', score: 700 },
+				{ name: '=10+20', score: 701 },
+				{ name: '@NOW', score: 703 },
+			],
+			columns,
+			'id',
+		);
+
+		const response = await authOwnerAgent
+			.get(
+				`/projects/${project.id}/data-tables/${dataTable.id}/download-csv?includeSystemColumns=false`,
+			)
+			.expect(200);
+
+		const lines = response.body.data.csvContent.split('\n');
+		expect(lines).toContain('plain-control,700');
+		expect(lines).toContain("'=10+20,701");
+		expect(lines).toContain("'@NOW,703");
+		expect(lines).not.toContain('=10+20,701');
+		expect(lines).not.toContain('@NOW,703');
+	});
+
 	test('should exclude system columns from empty table when includeSystemColumns=false', async () => {
 		const project = await createTeamProject('test project', owner);
 		const dataTable = await createDataTable(project, {

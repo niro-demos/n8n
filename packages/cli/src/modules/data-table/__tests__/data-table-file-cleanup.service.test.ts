@@ -6,6 +6,7 @@ import type { Mock } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
 import { DataTableFileCleanupService } from '../data-table-file-cleanup.service';
+import type { DataTableUploadService } from '../data-table-upload.service';
 
 vi.mock('fs', async () => ({
 	promises: {
@@ -27,8 +28,9 @@ describe('DataTableFileCleanupService', () => {
 	} as GlobalConfig;
 
 	const instanceSettings = mock<InstanceSettings>({ instanceType: 'main' });
+	const uploadService = mock<DataTableUploadService>();
 
-	const service = new DataTableFileCleanupService(globalConfig, instanceSettings);
+	const service = new DataTableFileCleanupService(globalConfig, instanceSettings, uploadService);
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -50,6 +52,7 @@ describe('DataTableFileCleanupService', () => {
 
 			expect(fs.unlink).toHaveBeenCalledWith(expectedPath);
 			expect(fs.unlink).toHaveBeenCalledTimes(1);
+			expect(uploadService.deleteMetadata).toHaveBeenCalledWith(fileId);
 		});
 
 		it('should ignore ENOENT error when file does not exist', async () => {
@@ -96,7 +99,11 @@ describe('DataTableFileCleanupService', () => {
 			vi.useFakeTimers();
 
 			const workerSettings = mock<InstanceSettings>({ instanceType: 'worker' });
-			const workerService = new DataTableFileCleanupService(globalConfig, workerSettings);
+			const workerService = new DataTableFileCleanupService(
+				globalConfig,
+				workerSettings,
+				uploadService,
+			);
 
 			await workerService.start();
 

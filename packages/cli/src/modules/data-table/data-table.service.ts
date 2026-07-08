@@ -38,6 +38,7 @@ import { DataTableColumnRepository } from './data-table-column.repository';
 import { DataTableCsvImportService } from './data-table-csv-import.service';
 import { DataTableRowsRepository } from './data-table-rows.repository';
 import { DataTableSizeValidator } from './data-table-size-validator.service';
+import { DataTableUploadService } from './data-table-upload.service';
 import { DataTableRepository } from './data-table.repository';
 import { columnTypeToFieldType } from './data-table.types';
 import { DataTableColumnNotFoundError } from './errors/data-table-column-not-found.error';
@@ -57,6 +58,7 @@ export class DataTableService {
 		private readonly projectRelationRepository: ProjectRelationRepository,
 		private readonly roleService: RoleService,
 		private readonly csvImportService: DataTableCsvImportService,
+		private readonly uploadService: DataTableUploadService,
 		private readonly eventService: EventService,
 	) {
 		this.logger = this.logger.scoped('data-table');
@@ -78,7 +80,7 @@ export class DataTableService {
 		return dataTable.projectId;
 	}
 
-	async createDataTable(projectId: string, dto: CreateDataTableDto) {
+	async createDataTable(projectId: string, dto: CreateDataTableDto, userId?: string) {
 		if (dto.fileId && dto.columns.length === 0) {
 			throw new DataTableValidationError(
 				'At least one column must be included when importing from CSV',
@@ -86,6 +88,8 @@ export class DataTableService {
 		}
 
 		await this.validateUniqueName(dto.name, projectId);
+
+		if (dto.fileId && userId) await this.uploadService.assertOwnedBy(dto.fileId, userId);
 
 		const result = await this.dataTableRepository.createDataTable(projectId, dto.name, dto.columns);
 
@@ -119,9 +123,11 @@ export class DataTableService {
 		dataTableId: string,
 		projectId: string,
 		fileId: string,
+		userId?: string,
 	): Promise<{ importedRowCount: number; systemColumnsIgnored: string[] }> {
 		await this.validateDataTableSize();
 		await this.validateDataTableExists(dataTableId, projectId);
+		if (userId) await this.uploadService.assertOwnedBy(fileId, userId);
 
 		try {
 			const tableColumns = await this.getColumns(dataTableId, projectId);
@@ -869,7 +875,7 @@ export class DataTableService {
 	}
 
 	private escapeCsvValue(value: unknown): string {
-		const str = String(value);
+		const str = this.neutralizeSpreadsheetFormula(String(value));
 
 		// RFC 4180 compliant escaping:
 		// - If value contains comma, quote, or newline, wrap in quotes
@@ -889,5 +895,12 @@ export class DataTableService {
 		}
 
 		return str;
+	}
+
+	private neutralizeSpreadsheetFormula(value: string): string {
+		const firstNonWhitespace = value.trimStart()[0];
+		return firstNonWhitespace && ['=', '+', '-', '@'].includes(firstNonWhitespace)
+			? `'${value}`
+			: value;
 	}
 }

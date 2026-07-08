@@ -13,6 +13,7 @@ import { DataTableColumnRepository } from '../data-table-column.repository';
 import { DataTableCsvImportService } from '../data-table-csv-import.service';
 import { DataTableRowsRepository } from '../data-table-rows.repository';
 import { DataTableSizeValidator } from '../data-table-size-validator.service';
+import { DataTableUploadService } from '../data-table-upload.service';
 import type { DataTable } from '../data-table.entity';
 import { DataTableRepository } from '../data-table.repository';
 import { DataTableService } from '../data-table.service';
@@ -30,6 +31,7 @@ describe('DataTableService', () => {
 	let mockProjectRelationRepository: Mocked<ProjectRelationRepository>;
 	let mockRoleService: Mocked<RoleService>;
 	let mockCsvImportService: Mocked<DataTableCsvImportService>;
+	let mockUploadService: Mocked<DataTableUploadService>;
 	let mockEventService: Mocked<EventService>;
 
 	beforeAll(async () => {
@@ -45,6 +47,7 @@ describe('DataTableService', () => {
 		mockProjectRelationRepository = mockInstance(ProjectRelationRepository);
 		mockRoleService = mockInstance(RoleService);
 		mockCsvImportService = mockInstance(DataTableCsvImportService);
+		mockUploadService = mockInstance(DataTableUploadService);
 		mockEventService = mockInstance(EventService);
 
 		// Mock the logger.scoped method to return the logger itself
@@ -59,6 +62,7 @@ describe('DataTableService', () => {
 			mockProjectRelationRepository,
 			mockRoleService,
 			mockCsvImportService,
+			mockUploadService,
 			mockEventService,
 		);
 

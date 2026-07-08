@@ -3835,6 +3835,56 @@ describe('POST /projects/:projectId/data-tables - CSV Import', () => {
 		);
 	});
 
+	test("should not create data table from another user's uploaded CSV file", async () => {
+		const controlMarker = 'same-user-report';
+		const controlCsvContent = `secret\n${controlMarker}`;
+		const controlUploadResponse = await authOwnerAgent
+			.post('/data-tables/uploads')
+			.attach('file', Buffer.from(controlCsvContent), {
+				filename: 'same-user-report.csv',
+				contentType: 'text/csv',
+			})
+			.expect(200);
+
+		const controlCreateResponse = await authOwnerAgent
+			.post(`/projects/${ownerProject.id}/data-tables`)
+			.send({
+				name: 'Same User Import',
+				hasHeaders: true,
+				fileId: controlUploadResponse.body.data.id,
+				columns: [{ name: 'secret_copy', type: 'string', csvColumnName: 'secret' }],
+			})
+			.expect(200);
+
+		const controlRowsResponse = await authOwnerAgent
+			.get(`/projects/${ownerProject.id}/data-tables/${controlCreateResponse.body.data.id}/rows`)
+			.expect(200);
+
+		expect(controlRowsResponse.body.data.data).toEqual(
+			expect.arrayContaining([expect.objectContaining({ secret_copy: controlMarker })]),
+		);
+
+		const foreignMarker = 'foreign-user-report';
+		const foreignCsvContent = `secret\n${foreignMarker}`;
+		const foreignUploadResponse = await authOwnerAgent
+			.post('/data-tables/uploads')
+			.attach('file', Buffer.from(foreignCsvContent), {
+				filename: 'foreign-user-report.csv',
+				contentType: 'text/csv',
+			})
+			.expect(200);
+
+		await authMemberAgent
+			.post(`/projects/${memberProject.id}/data-tables`)
+			.send({
+				name: 'Foreign User Import',
+				hasHeaders: true,
+				fileId: foreignUploadResponse.body.data.id,
+				columns: [{ name: 'secret_copy', type: 'string', csvColumnName: 'secret' }],
+			})
+			.expect(403);
+	});
+
 	test('should map CSV columns to table columns by position', async () => {
 		// Upload CSV with column names that have spaces
 		const csvContent =

@@ -10,6 +10,7 @@ import { extname } from 'path';
 
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 
+import { DataTableUploadService } from './data-table-upload.service';
 import { DataTableSizeValidator } from './data-table-size-validator.service';
 import { DataTableRepository } from './data-table.repository';
 import {
@@ -34,6 +35,7 @@ export class MulterUploadMiddleware implements UploadMiddleware {
 		private readonly globalConfig: GlobalConfig,
 		private readonly sizeValidator: DataTableSizeValidator,
 		private readonly dataTableRepository: DataTableRepository,
+		private readonly uploadService: DataTableUploadService,
 		private readonly logger: Logger,
 	) {
 		this.uploadDir = this.globalConfig.dataTable.uploadDir;
@@ -101,6 +103,7 @@ export class MulterUploadMiddleware implements UploadMiddleware {
 				if (authedReq.file) {
 					try {
 						await this.enqueueQuotaCheck(authedReq.file.path);
+						await this.uploadService.saveOwner(authedReq.file.filename, authedReq.user.id);
 					} catch (err) {
 						authedReq.fileUploadError = err as Error;
 					}
