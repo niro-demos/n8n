@@ -1,18 +1,36 @@
 import type { BinaryDataQueryDto, BinaryDataSignedQueryDto } from '@n8n/api-types';
-import type { Request, Response } from 'express';
+import type {
+	AuthenticatedRequest,
+	BinaryDataRepository,
+	ExecutionRepository,
+} from '@n8n/db';
+import type { Response } from 'express';
 import { JsonWebTokenError } from 'jsonwebtoken';
 import type { BinaryDataService } from 'n8n-core';
 import { FileNotFoundError } from 'n8n-core';
 import type { Readable } from 'node:stream';
 import { mock } from 'vitest-mock-extended';
 
+import type { License } from '@/license';
+import type { WorkflowSharingService } from '@/workflows/workflow-sharing.service';
+
 import { BinaryDataController } from '../binary-data.controller';
 
 describe('BinaryDataController', () => {
-	const request = mock<Request>();
+	const request = mock<AuthenticatedRequest>();
 	const response = mock<Response>();
 	const binaryDataService = mock<BinaryDataService>();
-	const controller = new BinaryDataController(binaryDataService);
+	const binaryDataRepository = mock<BinaryDataRepository>();
+	const executionRepository = mock<ExecutionRepository>();
+	const workflowSharingService = mock<WorkflowSharingService>();
+	const license = mock<License>();
+	const controller = new BinaryDataController(
+		binaryDataService,
+		binaryDataRepository,
+		executionRepository,
+		workflowSharingService,
+		license,
+	);
 
 	beforeEach(() => {
 		vi.resetAllMocks();
@@ -151,6 +169,44 @@ describe('BinaryDataController', () => {
 
 			expect(result).toBe(stream);
 			expect(binaryDataService.getAsStream).toHaveBeenCalledWith('filesystem:123');
+		});
+
+		describe.each(['filesystem-v2', 's3'])('for %s execution binary data', (mode) => {
+			const binaryDataId = `${mode}:workflows/workflow-1/executions/execution-1/binary_data/file-1`;
+
+			it('should return the file stream when the user can read the owning workflow', async () => {
+				const query = {
+					id: binaryDataId,
+					action: 'download',
+					fileName: 'test.txt',
+				} as BinaryDataQueryDto;
+				const stream = mock<Readable>();
+				request.user = mock();
+				license.isSharingEnabled.mockReturnValue(true);
+				workflowSharingService.getSharedWorkflowIds.mockResolvedValue(['workflow-1']);
+				binaryDataService.getAsStream.mockResolvedValue(stream);
+
+				const result = await controller.get(request, response, query);
+
+				expect(result).toBe(stream);
+				expect(workflowSharingService.getSharedWorkflowIds).toHaveBeenCalledWith(request.user, {
+					scopes: ['workflow:read'],
+				});
+			});
+
+			it('should reject when the user cannot read the owning workflow', async () => {
+				const query = {
+					id: binaryDataId,
+					action: 'download',
+					fileName: 'test.txt',
+				} as BinaryDataQueryDto;
+				request.user = mock();
+				license.isSharingEnabled.mockReturnValue(true);
+				workflowSharingService.getSharedWorkflowIds.mockResolvedValue(['workflow-2']);
+
+				await expect(controller.get(request, response, query)).rejects.toThrow('Forbidden');
+				expect(binaryDataService.getAsStream).not.toHaveBeenCalled();
+			});
 		});
 
 		describe('with malicious binary data IDs', () => {

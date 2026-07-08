@@ -1,9 +1,10 @@
-import { mockInstance } from '@n8n/backend-test-utils';
+import { createWorkflow, shareWorkflowWithUsers, testDb, mockInstance } from '@n8n/backend-test-utils';
 import { BinaryDataService, FileNotFoundError } from 'n8n-core';
 import fsp from 'node:fs/promises';
 import { Readable } from 'node:stream';
 
-import { createOwner } from './shared/db/users';
+import { createExecution } from './shared/db/executions';
+import { createMember, createOwner } from './shared/db/users';
 import type { SuperAgentTest } from './shared/types';
 import { setupTestServer } from './shared/utils';
 
@@ -20,6 +21,10 @@ let authOwnerAgent: SuperAgentTest;
 beforeAll(async () => {
 	const owner = await createOwner();
 	authOwnerAgent = testServer.authAgentFor(owner);
+});
+
+beforeEach(async () => {
+	await testDb.truncate(['ExecutionEntity', 'ExecutionData', 'WorkflowEntity', 'SharedWorkflow']);
 });
 
 afterEach(() => {
@@ -160,6 +165,55 @@ describe('GET /binary-data', () => {
 					action,
 				})
 				.expect(404);
+		});
+	});
+
+	describe('should enforce workflow access for execution binary data IDs', () => {
+		test.each(['filesystem-v2', 's3'])('on request to download [%s]', async (mode) => {
+			testServer.license.enable('feat:sharing');
+
+			const owner = await createOwner();
+			const sharedMember = await createMember();
+			const outsider = await createMember();
+			const ownerAgent = testServer.authAgentFor(owner);
+			const sharedMemberAgent = testServer.authAgentFor(sharedMember);
+			const outsiderAgent = testServer.authAgentFor(outsider);
+			const workflow = await createWorkflow({}, owner);
+			const execution = await createExecution({}, workflow);
+			const binaryDataId = `${mode}:workflows/${workflow.id}/executions/${execution.id}/binary_data/file-1`;
+
+			await shareWorkflowWithUsers(workflow, [sharedMember]);
+			binaryDataService.getAsStream.mockResolvedValue(Readable.from(Buffer.from('hello world')));
+
+			await ownerAgent
+				.get('/binary-data')
+				.query({
+					id: binaryDataId,
+					fileName,
+					mimeType,
+					action: 'download',
+				})
+				.expect(200);
+
+			await sharedMemberAgent
+				.get('/binary-data')
+				.query({
+					id: binaryDataId,
+					fileName,
+					mimeType,
+					action: 'download',
+				})
+				.expect(200);
+
+			await outsiderAgent
+				.get('/binary-data')
+				.query({
+					id: binaryDataId,
+					fileName,
+					mimeType,
+					action: 'download',
+				})
+				.expect(403);
 		});
 	});
 });
