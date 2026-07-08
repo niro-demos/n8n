@@ -423,8 +423,8 @@ export class OAuthServerService implements OAuthServerProvider {
 	}
 
 	/**
-	 * Delete an OAuth client and all related data.
-	 * Verifies that the requesting user has a consent relationship with the client.
+	 * Revoke the requesting user's consent for an OAuth client.
+	 * Deletes the shared client record only after the last consent is removed.
 	 */
 	async deleteClient(clientId: string, userId: string): Promise<void> {
 		// First check if the client exists
@@ -442,7 +442,20 @@ export class OAuthServerService implements OAuthServerProvider {
 			throw new Error(`OAuth client with ID ${clientId} not found`);
 		}
 
-		this.logger.info('Deleting OAuth client and related data', { clientId });
+		this.logger.info('Revoking OAuth client consent', { clientId, userId });
+
+		await this.userConsentRepository.delete({ clientId, userId });
+
+		const remainingConsentCount = await this.userConsentRepository.countBy({ clientId });
+		if (remainingConsentCount > 0) {
+			this.logger.info('OAuth client consent revoked for user', {
+				clientId,
+				clientName: client.name,
+				userId,
+				remainingConsentCount,
+			});
+			return;
+		}
 
 		await this.oauthClientRepository.delete({ id: clientId });
 

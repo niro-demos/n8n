@@ -873,7 +873,7 @@ describe('OAuthServerService', () => {
 	});
 
 	describe('deleteClient', () => {
-		it('should delete client when user has consent', async () => {
+		it('should delete the client when revoking the last remaining consent', async () => {
 			const client = {
 				id: 'client-123',
 				name: 'Test Client',
@@ -884,10 +884,64 @@ describe('OAuthServerService', () => {
 				userId: 'user-456',
 				clientId: 'client-123',
 			} as any);
+			userConsentRepository.delete.mockResolvedValue({} as any);
+			userConsentRepository.countBy.mockResolvedValue(0);
 			oauthClientRepository.delete.mockResolvedValue({} as any);
 
 			await service.deleteClient('client-123', 'user-456');
 
+			expect(userConsentRepository.delete).toHaveBeenCalledWith({
+				clientId: 'client-123',
+				userId: 'user-456',
+			});
+			expect(oauthClientRepository.delete).toHaveBeenCalledWith({ id: 'client-123' });
+		});
+
+		it('should revoke only the requesting user consent when other users still rely on the client', async () => {
+			const client = {
+				id: 'client-123',
+				name: 'Shared Client',
+			} as OAuthClient;
+
+			oauthClientRepository.findOne.mockResolvedValue(client);
+			userConsentRepository.findOneBy.mockResolvedValue({
+				userId: 'user-456',
+				clientId: 'client-123',
+			} as any);
+			userConsentRepository.delete.mockResolvedValue({} as any);
+			userConsentRepository.countBy.mockResolvedValue(1);
+
+			await service.deleteClient('client-123', 'user-456');
+
+			expect(userConsentRepository.delete).toHaveBeenCalledWith({
+				clientId: 'client-123',
+				userId: 'user-456',
+			});
+			expect(userConsentRepository.countBy).toHaveBeenCalledWith({ clientId: 'client-123' });
+			expect(oauthClientRepository.delete).not.toHaveBeenCalled();
+		});
+
+		it('should delete the client after revoking the requesting user consent when no consents remain', async () => {
+			const client = {
+				id: 'client-123',
+				name: 'Test Client',
+			} as OAuthClient;
+
+			oauthClientRepository.findOne.mockResolvedValue(client);
+			userConsentRepository.findOneBy.mockResolvedValue({
+				userId: 'user-456',
+				clientId: 'client-123',
+			} as any);
+			userConsentRepository.delete.mockResolvedValue({} as any);
+			userConsentRepository.countBy.mockResolvedValue(0);
+			oauthClientRepository.delete.mockResolvedValue({} as any);
+
+			await service.deleteClient('client-123', 'user-456');
+
+			expect(userConsentRepository.delete).toHaveBeenCalledWith({
+				clientId: 'client-123',
+				userId: 'user-456',
+			});
 			expect(oauthClientRepository.delete).toHaveBeenCalledWith({ id: 'client-123' });
 		});
 
