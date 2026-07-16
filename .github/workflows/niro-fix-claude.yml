@@ -2,6 +2,12 @@ name: Niro Fix (claude)
 
 on:
   workflow_dispatch:
+    inputs:
+      auth_check_only:
+        description: Test GitHub App publishing without running Niro
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -14,7 +20,89 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  auth-check:
+    if: ${{ inputs.auth_check_only }}
+    name: Check Niro GitHub App publishing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mint control token with the official action
+        id: control-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.NIRO_APP_CLIENT_ID }}
+          private-key: ${{ secrets.NIRO_APP_PRIVATE_KEY }}
+          owner: niro-demos
+          repositories: n8n
+
+      - name: Test control token repository writes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.control-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api /installation --jq '.permissions.contents')" = "write"
+          gh api /installation/repositories --paginate \
+            --jq '.repositories[].full_name' | grep -Fx "$GITHUB_REPOSITORY"
+
+          branch="niro-auth-control-${GITHUB_RUN_ID}"
+          cleanup() {
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          base_sha="$(git rev-parse "origin/${{ github.event.repository.default_branch }}")"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${branch}" -f sha="$base_sha" --silent
+          cleanup
+          trap - EXIT
+
+      - name: Install the Niro version from the failed run
+        shell: bash
+        run: curl -fsSL https://raw.githubusercontent.com/apxlabs-ai/niro/main/install.sh | NIRO_VERSION=v0.1.61 sh
+
+      - name: Test Niro-minted token and exact git credential path
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+          NIRO_APP_CLIENT_ID: ${{ secrets.NIRO_APP_CLIENT_ID }}
+          NIRO_APP_PRIVATE_KEY: ${{ secrets.NIRO_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          token="$(niro git token -C "$GITHUB_WORKSPACE")"
+          echo "::add-mask::$token"
+          test "$(GH_TOKEN="$token" gh api /installation --jq '.permissions.contents')" = "write"
+          GH_TOKEN="$token" gh api /installation/repositories --paginate \
+            --jq '.repositories[].full_name' | grep -Fx "$GITHUB_REPOSITORY"
+          unset token
+
+          git config --local --unset-all credential.helper || true
+          git config --local --add credential.helper ""
+          git config --local --add credential.helper "!$(command -v niro) git credential"
+          git config --local credential.useHttpPath true
+
+          branch="niro-auth-niro-${GITHUB_RUN_ID}"
+          cleanup() {
+            git push origin --delete "$branch" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          base_sha="$(git rev-parse "origin/${{ github.event.repository.default_branch }}")"
+          git push origin "${base_sha}:refs/heads/${branch}"
+          cleanup
+          trap - EXIT
+
   fix:
+    if: ${{ !inputs.auth_check_only }}
     name: Pentest and open fix PRs
     runs-on: ubuntu-latest
     timeout-minutes: 300
