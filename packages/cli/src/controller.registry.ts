@@ -1,5 +1,5 @@
 import type { ZodClass } from '@n8n/api-types';
-import { inProduction } from '@n8n/backend-common';
+import { enforceSecureDefaults } from '@n8n/backend-common';
 import { GlobalConfig } from '@n8n/config';
 import { type BooleanLicenseFeature } from '@n8n/constants';
 import { isAuthenticatedRequest } from '@n8n/db';
@@ -159,12 +159,12 @@ export class ControllerRegistry {
 		const middlewares: RequestHandler[] = [];
 
 		// LAYER 1: IP-based rate limiting (always before auth)
-		if (inProduction && route.ipRateLimit) {
+		if (enforceSecureDefaults && route.ipRateLimit) {
 			middlewares.push(this.rateLimitService.createIpRateLimitMiddleware(route.ipRateLimit));
 		}
 
 		// LAYER 2a: Keyed rate limiting with body source (BEFORE auth)
-		if (inProduction && route.keyedRateLimit?.source === 'body') {
+		if (enforceSecureDefaults && route.keyedRateLimit?.source === 'body') {
 			assert(
 				bodyDtoClass,
 				'Body argument type (@Body decorator) is required for body-based rate limiting',
@@ -197,7 +197,7 @@ export class ControllerRegistry {
 			);
 
 			// Separate ifs intentionally to prevent configuration errors in development
-			if (inProduction) {
+			if (enforceSecureDefaults) {
 				middlewares.push(
 					this.rateLimitService.createUserKeyedRateLimitMiddleware(route.keyedRateLimit),
 				);

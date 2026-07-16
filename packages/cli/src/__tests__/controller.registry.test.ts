@@ -2,6 +2,7 @@ vi.mock('@n8n/backend-common', async () => {
 	return {
 		...(await vi.importActual<typeof import('@n8n/backend-common')>('@n8n/backend-common')),
 		inProduction: true,
+		enforceSecureDefaults: true,
 	};
 });
 

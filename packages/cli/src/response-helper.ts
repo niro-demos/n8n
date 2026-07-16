@@ -1,4 +1,4 @@
-import { inDevelopment, Logger } from '@n8n/backend-common';
+import { exposeStackTraceInErrorResponse, inDevelopment, Logger } from '@n8n/backend-common';
 import { isUniqueConstraintError, type User } from '@n8n/db';
 import { Container } from '@n8n/di';
 import type { ReportingOptions } from '@n8n/errors';
@@ -86,7 +86,10 @@ export function sendErrorResponse(res: Response, error: Error) {
 		Object.assign(response, error);
 	}
 
-	if (error.stack && inDevelopment) {
+	// Only ever surface the stack trace to the caller on an explicit local-dev
+	// opt-in — never just because NODE_ENV happens to be unset, which is the
+	// default posture for most self-hosted deployments.
+	if (error.stack && exposeStackTraceInErrorResponse) {
 		response.stacktrace = error.stack;
 	}
 
