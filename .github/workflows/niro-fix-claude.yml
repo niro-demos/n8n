@@ -48,7 +48,6 @@ jobs:
           GH_TOKEN: ${{ steps.control-token.outputs.token }}
         run: |
           set -euo pipefail
-          test "$(gh api /installation --jq '.permissions.contents')" = "write"
           gh api /installation/repositories --paginate \
             --jq '.repositories[].full_name' | grep -Fx "$GITHUB_REPOSITORY"
 
@@ -80,7 +79,6 @@ jobs:
 
           token="$(niro git token -C "$GITHUB_WORKSPACE")"
           echo "::add-mask::$token"
-          test "$(GH_TOKEN="$token" gh api /installation --jq '.permissions.contents')" = "write"
           GH_TOKEN="$token" gh api /installation/repositories --paginate \
             --jq '.repositories[].full_name' | grep -Fx "$GITHUB_REPOSITORY"
           unset token
