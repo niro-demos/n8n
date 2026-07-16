@@ -3,6 +3,7 @@ vi.mock('@n8n/backend-common', async () => {
 	return {
 		...actual,
 		inProduction: true,
+		enforceSecureDefaults: true,
 	};
 });
 
