@@ -78,6 +78,7 @@ export class JsTaskRunnerProcess extends TaskRunnerProcessBase {
 			N8N_RUNNERS_TASK_TIMEOUT: this.runnerConfig.taskTimeout.toString(),
 			N8N_RUNNERS_HEARTBEAT_INTERVAL: this.runnerConfig.heartbeatInterval.toString(),
 			N8N_RUNNERS_INSECURE_MODE: process.env.N8N_RUNNERS_INSECURE_MODE,
+			N8N_RUNNERS_MAX_SYNC_EXECUTION_TIMEOUT: process.env.N8N_RUNNERS_MAX_SYNC_EXECUTION_TIMEOUT,
 			// Forwarded so the internal runner's graceful-shutdown grace can be coordinated
 			// with n8n's (otherwise it falls back to the runner's own default).
 			N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT: process.env.N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT,
