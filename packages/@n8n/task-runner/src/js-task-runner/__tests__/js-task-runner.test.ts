@@ -37,6 +37,10 @@ defaultConfig.jsRunnerConfig ??= {
 	allowedBuiltInModules: '',
 	allowedExternalModules: '',
 	insecureMode: false,
+	// Matches this file's default `taskTimeout` override (see
+	// `createRunnerWithOpts`) so pre-existing tests keep their prior
+	// effective timeout (the lower of the two always applies).
+	maxSyncExecutionTimeout: 60,
 };
 
 describe('JsTaskRunner', () => {
@@ -2113,6 +2117,36 @@ describe('JsTaskRunner', () => {
 					}),
 				).rejects.toThrow();
 			});
+
+			it('should not let one busy-looping task starve an unrelated task on the same runner', async () => {
+				// A single runner process executes all of its tasks on one V8 thread.
+				// A non-yielding `while (true)` task must not be able to occupy that
+				// thread for anywhere near the full (possibly large, e.g. for
+				// legitimate long-running async work) task deadline - an unrelated
+				// task queued behind it on the same runner must be unblocked well
+				// before that, via a short, dedicated synchronous-execution cap.
+				const runner = createRunnerWithOpts({ maxSyncExecutionTimeout: 1 }, { taskTimeout: 10 });
+
+				const busyLoopPromise = executeRunCode({ code: 'while(true) {}', runner }).catch(
+					(error: unknown) => error,
+				);
+
+				const unrelatedTaskPromise = executeRunCode({ code: 'return 42', runner });
+
+				const RACE_CEILING_MS = 4000;
+				const timedOutSentinel = Symbol('timed-out');
+				const raceResult = await Promise.race([
+					unrelatedTaskPromise,
+					new Promise((resolve) => setTimeout(() => resolve(timedOutSentinel), RACE_CEILING_MS)),
+				]);
+
+				expect(raceResult).not.toBe(timedOutSentinel);
+				expect(raceResult).toEqual({ result: 42, customData: undefined, staticData: undefined });
+
+				// The busy loop itself must eventually be interrupted too.
+				const busyLoopOutcome = await busyLoopPromise;
+				expect(busyLoopOutcome).toBeInstanceOf(Error);
+			}, 8000);
 		});
 
 		describe('return value structure', () => {

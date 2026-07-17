@@ -130,6 +130,16 @@ export class JsTaskRunner extends TaskRunner {
 
 	private readonly mode: 'secure' | 'insecure' = 'secure';
 
+	/**
+	 * Ceiling (seconds) on the vm's own timeout for the *synchronous* portion
+	 * of a task's execution - always the lower of the overall task deadline
+	 * and the dedicated sync-execution cap, so a large task deadline (meant
+	 * to accommodate awaited I/O) can never be misread as license for a
+	 * non-yielding script to occupy the shared thread that long. See
+	 * {@link JsRunnerConfig.maxSyncExecutionTimeout}.
+	 */
+	private readonly syncExecutionTimeoutSeconds: number;
+
 	constructor(config: MainConfig, name = 'JS Task Runner') {
 		super({
 			taskType: 'javascript',
@@ -153,6 +163,10 @@ export class JsTaskRunner extends TaskRunner {
 			jsRunnerConfig.allowedExternalModules ?? '',
 		);
 		this.mode = jsRunnerConfig.insecureMode ? 'insecure' : 'secure';
+		this.syncExecutionTimeoutSeconds = Math.min(
+			this.taskTimeout,
+			jsRunnerConfig.maxSyncExecutionTimeout,
+		);
 
 		this.requireResolver = createRequireResolver({
 			allowedBuiltInModules,
@@ -312,7 +326,7 @@ export class JsTaskRunner extends TaskRunner {
 				const taskResult: Promise<unknown> = runInContext(
 					this.createVmExecutableCode(settings.code),
 					context,
-					{ timeout: this.taskTimeout * 1000 },
+					{ timeout: this.syncExecutionTimeoutSeconds * 1000 },
 				) as Promise<unknown>;
 
 				void taskResult
@@ -359,7 +373,7 @@ export class JsTaskRunner extends TaskRunner {
 
 				if (this.mode === 'secure') {
 					taskResult = runInContext(this.createVmExecutableCode(settings.code), context, {
-						timeout: this.taskTimeout * 1000,
+						timeout: this.syncExecutionTimeoutSeconds * 1000,
 					}) as Promise<TaskResultData['result']>;
 				} else {
 					taskResult = this.runDirectly<TaskResultData['result']>(settings.code, context);
@@ -434,7 +448,7 @@ export class JsTaskRunner extends TaskRunner {
 
 					if (this.mode === 'secure') {
 						taskResult = runInContext(this.createVmExecutableCode(settings.code), context, {
-							timeout: this.taskTimeout * 1000,
+							timeout: this.syncExecutionTimeoutSeconds * 1000,
 						}) as Promise<INodeExecutionData>;
 					} else {
 						taskResult = this.runDirectly<INodeExecutionData>(settings.code, context);
